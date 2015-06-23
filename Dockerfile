@@ -23,9 +23,9 @@ ENV PKG_CONFIG_PATH ${SRC}/lib/pkgconfig
 
 COPY ffmpeg.sh /tmp/ffmpeg.sh
 
-#RUN bash /tmp/ffmpeg.sh
+RUN bash /tmp/ffmpeg.sh
 
-#RUN ffmpeg -buildconf
+RUN ffmpeg -buildconf
 
 # rbenv/rubies
 
