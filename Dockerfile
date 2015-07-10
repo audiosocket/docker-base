@@ -4,7 +4,7 @@ WORKDIR /tmp/workdir
 
 # apts
 
-RUN apt-get update && apt-get install -y build-essential git mercurial perl curl cmake g++ autoconf libtool openssl pkg-config zlib1g-dev libssl-dev libreadline-dev libyaml-dev libxml2-dev libxslt-dev software-properties-common libffi-dev
+RUN apt-get update && apt-get install -y build-essential git mercurial perl curl cmake g++ autoconf libtool openssl pkg-config zlib1g-dev libssl-dev libreadline-dev libyaml-dev libxml2-dev libxslt-dev software-properties-common libffi-dev m4 aspcud unzip libx11-dev ocaml ocaml-native-compilers camlp4-extra sudo
 
 # ffmpeg
 
@@ -52,3 +52,40 @@ RUN bash -l -c 'for v in $(cat /root/rubies.txt); do rbenv global $v; gem instal
 
 RUN rbenv global 2.2.0
 
+# ocaml
+
+ADD opam-installext /usr/bin/opam-installext
+ADD opam.list /etc/apt/sources.list.d/opam.list
+
+RUN curl -OL http://download.opensuse.org/repositories/home:ocaml/xUbuntu_14.04/Release.key
+
+RUN apt-key add - < Release.key
+RUN apt-get -y update
+
+RUN git clone -b 1.2 git://github.com/ocaml/opam
+RUN sh -c "cd opam && make cold && make install"
+
+RUN adduser --disabled-password --gecos "" opam
+RUN passwd -l opam
+
+ADD opamsudo /etc/sudoers.d/opam
+RUN chmod 440 /etc/sudoers.d/opam
+RUN chown root:root /etc/sudoers.d/opam
+RUN chown -R opam:opam /home/opam
+
+USER opam
+
+ENV HOME /home/opam
+ENV OPAMYES 1
+
+WORKDIR /home/opam
+USER opam
+
+RUN sudo -u opam sh -c "git clone git://github.com/ocaml/opam-repository"
+RUN sudo -u opam sh -c "opam init -a -y /home/opam/opam-repository"
+RUN sudo -u opam sh -c "opam switch -y 4.02.1"
+RUN sudo -u opam sh -c "opam install ocamlfind camlp4"
+
+WORKDIR /home/opam/opam-repository
+
+ONBUILD RUN sudo -u opam sh -c "cd /home/opam/opam-repository && git pull && opam update -u -y"
