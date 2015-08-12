@@ -64,7 +64,7 @@ ENV OPAMYES 1
 
 ADD https://raw.githubusercontent.com/ocaml/opam/master/shell/opam_installer.sh /home/opam/opam_installer.sh
 RUN sh /home/opam/opam_installer.sh /usr/local/bin 4.01.0
-o
+
 USER opam
 
 WORKDIR /home/opam
