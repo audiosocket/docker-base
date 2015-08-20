@@ -1,91 +1,65 @@
-FROM ubuntu:14.04
+FROM gliderlabs/alpine
 
-WORKDIR /tmp/workdir
+RUN adduser -D audiobot
+ENV HOME /home/audiobot
 
-# apts
+WORKDIR /home/audiobot
 
-RUN apt-get update && apt-get install -y build-essential git mercurial perl curl cmake g++ autoconf libtool openssl pkg-config zlib1g-dev libssl-dev libreadline-dev libyaml-dev libxml2-dev libxslt-dev software-properties-common libffi-dev m4 aspcud unzip libx11-dev ocaml ocaml-native-compilers camlp4-extra sudo
+# apk
 
-# ffmpeg
+RUN apk update && apk add patch bash ffmpeg ruby unzip m4 make gcc git musl-dev libsamplerate-dev zlib-dev openssl-dev readline-dev 
+RUN apk add ocaml --update-cache --repository http://dl-3.alpinelinux.org/alpine/edge/testing/ --allow-untrusted
 
-ENV FFMPEG_VERSION  2.7.1
-ENV MPLAYER_VERSION 1.1.1
-ENV YASM_VERSION    1.3.0
-ENV OGG_VERSION     1.3.2
-ENV VORBIS_VERSION  1.3.4
-ENV LAME_VERSION    3.99.5
-ENV FAAC_VERSION    1.28
-ENV XVID_VERSION    1.3.3
-ENV FDKAAC_VERSION  0.1.3
-ENV SRC /usr/local
-ENV LD_LIBRARY_PATH ${SRC}/lib
-ENV PKG_CONFIG_PATH ${SRC}/lib/pkgconfig
+# Boo
 
-COPY ffmpeg.sh /tmp/ffmpeg.sh
+USER audiobot
 
-RUN bash /tmp/ffmpeg.sh
+RUN curl -OL http://www.fftw.org/fftw-3.3.4.tar.gz
+RUN tar xvzf fftw-3.3.4.tar.gz
+RUN cd fftw-3.3.4 && ./configure --prefix /usr --enable-shared && make
 
-RUN ffmpeg -buildconf
+USER root
+RUN cd fftw-3.3.4 && make install
 
 # rbenv/rubies
 
-RUN git clone https://github.com/sstephenson/rbenv.git /usr/local/rbenv
-RUN echo '# rbenv setup' > /etc/profile.d/rbenv.sh
-RUN echo 'export RBENV_ROOT=/usr/local/rbenv' >> /etc/profile.d/rbenv.sh
-RUN echo 'export PATH="$RBENV_ROOT/bin:$RBENV_ROOT/shims:$PATH"' >> /etc/profile.d/rbenv.sh
-RUN echo 'eval "$(rbenv init -)"' >> /etc/profile.d/rbenv.sh
-RUN chmod +x /etc/profile.d/rbenv.sh
+USER audiobot
 
-RUN mkdir /usr/local/rbenv/plugins
-RUN git clone https://github.com/sstephenson/ruby-build.git /usr/local/rbenv/plugins/ruby-build
+RUN git clone https://github.com/sstephenson/rbenv.git /home/audiobot/.rbenv
 
-ENV RBENV_ROOT /usr/local/rbenv
+USER root
+RUN ln -s /home/audiobot/.rbenv/bin/rbenv /usr/local/bin
 
-ENV PATH $RBENV_ROOT/bin:$RBENV_ROOT/shims:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+USER audiobot
 
-ADD ./rubies.txt /root/rubies.txt
+RUN mkdir /home/audiobot/.rbenv/plugins
+RUN git clone https://github.com/sstephenson/ruby-build.git /home/audiobot/.rbenv/plugins/ruby-build
 
-RUN xargs -L 1 rbenv install < /root/rubies.txt
+ENV RBENV_ROOT /home/audiobot/.rbenv
 
-RUN echo 'gem: --no-rdoc --no-ri' >> /.gemrc
-RUN bash -l -c 'for v in $(cat /root/rubies.txt); do rbenv global $v; gem install bundler; done'
+ADD ./rubies.txt /home/audiobot/rubies.txt
 
-RUN rbenv global 2.2.0
+ENV CONFIGURE_OPTS CFLAGS=-fPIC
 
-# # ocaml
+RUN xargs rbenv install < /home/audiobot/rubies.txt
 
-# ADD opam-installext /usr/bin/opam-installext
-# ADD opam.list /etc/apt/sources.list.d/opam.list
+RUN echo 'gem: --no-rdoc --no-ri' >> /home/audiobot/.gemrc
+RUN bash -l -c 'eval "$(rbenv init -)" && for v in $(cat /home/audiobot/rubies.txt); do rbenv local $v && gem install bundler; done'
 
-# RUN curl -OL http://download.opensuse.org/repositories/home:ocaml/xUbuntu_14.04/Release.key
+RUN rbenv local 2.2.0
 
-# RUN apt-key add - < Release.key
-# RUN apt-get -y update
+# Opam
 
-# RUN git clone -b 1.2 git://github.com/ocaml/opam
-# RUN sh -c "cd opam && make cold && make install"
+RUN curl -OL https://github.com/ocaml/opam/releases/download/1.2.2/opam-full-1.2.2.tar.gz
+RUN tar xvzf opam-full-1.2.2.tar.gz && cd opam-full-1.2.2 && ./configure && make lib-ext all
 
-# RUN adduser --disabled-password --gecos "" opam
-# RUN passwd -l opam
+USER root
+RUN cd opam-full-1.2.2 && make install
 
-# ADD opamsudo /etc/sudoers.d/opam
-# RUN chmod 440 /etc/sudoers.d/opam
-# RUN chown root:root /etc/sudoers.d/opam
-# RUN chown -R opam:opam /home/opam
+USER audiobot
 
-# USER opam
+ENV OPAMYES 1
 
-# ENV HOME /home/opam
-# ENV OPAMYES 1
+RUN opam init --comp=4.03.0+trunk -a -y
 
-# WORKDIR /home/opam
-# USER opam
-
-# RUN sudo -u opam sh -c "git clone git://github.com/ocaml/opam-repository"
-# RUN sudo -u opam sh -c "opam init -a -y /home/opam/opam-repository"
-# RUN sudo -u opam sh -c "opam switch -y 4.02.1"
-# RUN sudo -u opam sh -c "opam install ocamlfind camlp4"
-
-# WORKDIR /home/opam/opam-repository
-
-# ONBUILD RUN sudo -u opam sh -c "cd /home/opam/opam-repository && git pull && opam update -u -y"
+RUN opam install atdgen redis cryptokit fftw3 samplerate ounit
